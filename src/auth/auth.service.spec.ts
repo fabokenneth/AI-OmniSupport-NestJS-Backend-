@@ -99,14 +99,13 @@ describe('AuthService', () => {
   describe('registerCompany()', () => {
     const dto: RegisterCompanyDto = {
       companyName: 'Acme Corp',
-      companySlug: 'acme-corp',
       email: 'admin@acme.com',
       password: 'password123',
       firstName: 'Alice',
       lastName: 'Admin',
     };
 
-    const savedCompany = { id: 'company-uuid-1', name: dto.companyName, slug: dto.companySlug };
+    const savedCompany = { id: 'company-uuid-1', name: dto.companyName };
     const savedAdmin = mockUserFactory({ role: UserRole.ADMIN, companyId: savedCompany.id });
 
     const setupTransactionMock = () => {

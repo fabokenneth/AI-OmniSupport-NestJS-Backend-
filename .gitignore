@@ -1,5 +1,9 @@
+# Generated API spec
+openapi.yaml
+
 # Build output
 /dist
+/dist-scripts
 /out-tsc
 
 # Dependencies
