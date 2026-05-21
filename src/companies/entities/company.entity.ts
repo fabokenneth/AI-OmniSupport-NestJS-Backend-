@@ -20,10 +20,6 @@ export class Company {
   name: string;
 
   @ApiProperty()
-  @Column({ unique: true })
-  slug: string;
-
-  @ApiProperty()
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 

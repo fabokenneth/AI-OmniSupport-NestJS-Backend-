@@ -42,7 +42,6 @@ export class AuthService {
     const savedUser = await this.dataSource.transaction(async (manager) => {
       const company = manager.create(Company, {
         name: dto.companyName,
-        slug: dto.companySlug,
       });
       const savedCompany = await manager.save(Company, company);
 

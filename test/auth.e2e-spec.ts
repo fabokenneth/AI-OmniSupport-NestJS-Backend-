@@ -124,7 +124,6 @@ describe('Auth (e2e)', () => {
   describe('POST /api/auth/register-company', () => {
     const validBody = {
       companyName: 'Test Corp',
-      companySlug: 'test-corp',
       email: 'admin@testcorp.com',
       password: 'password123',
       firstName: 'Alice',
@@ -170,14 +169,6 @@ describe('Auth (e2e)', () => {
       expect(res.status).toBe(409);
       expect(res.body.success).toBe(false);
       expect(mockDataSource.transaction).not.toHaveBeenCalled();
-    });
-
-    it('400 — rejects invalid slug (uppercase)', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/api/auth/register-company')
-        .send({ ...validBody, companySlug: 'Invalid_Slug' });
-
-      expect(res.status).toBe(400);
     });
 
     it('400 — rejects short password', async () => {
