@@ -56,12 +56,13 @@ Built with **NestJS 10** and **TypeScript**.
 
 ```
 src/
-├── auth/            # JWT auth, refresh token rotation, RBAC guards & strategies
-├── companies/       # Tenant management (GET /me, PUT /me — Admin only)
-├── knowledge-base/  # Document upload, splitting, vectorisation via pgvector
-├── messaging/       # Chat logic + RAG orchestration pipeline
-├── connectors/      # Webhook handlers (WhatsApp Cloud API)
-└── common/          # Global filter, response interceptor, decorators
+├── auth/                 # JWT auth, refresh token rotation, RBAC guards & strategies
+├── companies/            # Tenant management (GET /me, PUT /me — Admin only)
+├── ai-configuration/     # AI assistant identity, tone, and instruction rules (1:1 per company)
+├── knowledge-base/       # Document upload, splitting, vectorisation via pgvector
+├── messaging/            # Chat logic + RAG orchestration pipeline
+├── connectors/           # Webhook handlers (WhatsApp Cloud API)
+└── common/               # Global filter, response interceptor, decorators
 ```
 
 All modules are fully isolated. Cross-tenant data access is architecturally impossible — `company_id` is always derived from the JWT, never from the request body.
@@ -173,6 +174,13 @@ All endpoints are prefixed with `/api`.
 | `GET` | `/api/companies/me` | Admin JWT | Get own company profile |
 | `PUT` | `/api/companies/me` | Admin JWT | Update own company profile |
 
+### AI Configuration endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/ai-config` | JWT | Fetch the company's AI assistant configuration |
+| `PUT` | `/api/ai-config` | JWT | Create or overwrite the AI assistant configuration |
+
 ---
 
 ## Auth Flow
@@ -230,9 +238,11 @@ Current coverage:
 | Suite | Tests | Status |
 |---|---|---|
 | `AuthService` unit tests | 14 | Passing |
-| Auth E2E (`/api/auth/*`) | 21 | Passing |
+| Auth E2E (`/api/auth/*`) | 20 | Passing |
+| `AiConfigurationService` unit tests | 5 | Passing |
+| AI Config E2E (`/api/ai-config`) | 9 | Passing |
 
-> E2E tests require a running PostgreSQL instance. Use `docker compose up -d` before running them.
+> E2E tests do not require a running database — all repositories are mocked.
 
 ---
 
@@ -261,6 +271,13 @@ Current coverage:
 │   │   ├── entities/           # Company entity
 │   │   ├── companies.controller.ts
 │   │   └── companies.service.ts
+│   ├── ai-configuration/
+│   │   ├── dto/                # upsert-ai-configuration
+│   │   ├── entities/           # AiConfiguration entity
+│   │   ├── enums/              # Tone (professional | warm | casual | technical)
+│   │   ├── ai-configuration.controller.ts
+│   │   ├── ai-configuration.service.ts
+│   │   └── ai-configuration.service.spec.ts
 │   ├── knowledge-base/
 │   │   ├── dto/                # upload-document
 │   │   ├── entities/           # Document entity
@@ -277,6 +294,7 @@ Current coverage:
 │       └── interceptors/       # TransformResponseInterceptor
 └── test/
     ├── auth.e2e-spec.ts
+    ├── ai-configuration.e2e-spec.ts
     └── jest-e2e.json
 ```
 
@@ -288,7 +306,10 @@ Current coverage:
 - [x] Company bootstrapping — atomic `register-company` transaction
 - [x] JWT auth with refresh token rotation + RBAC
 - [x] Unit tests — AuthService (14 tests)
-- [x] E2E tests — Auth endpoints (21 tests)
+- [x] E2E tests — Auth endpoints (20 tests)
+- [x] AI Configuration module — `GET/PUT /api/ai-config` (upsert, 1:1 per company)
+- [x] Unit tests — AiConfigurationService (5 tests)
+- [x] E2E tests — AI Config endpoints (9 tests)
 - [ ] LangChain RAG pipeline in `MessagingService`
 - [ ] AWS S3 document upload in `KnowledgeBaseService`
 - [ ] HMAC-SHA256 signature validation for WhatsApp webhooks
