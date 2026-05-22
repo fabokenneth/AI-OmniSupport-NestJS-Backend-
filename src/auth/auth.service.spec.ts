@@ -132,7 +132,12 @@ describe('AuthService', () => {
 
       const result = await service.registerCompany(dto);
 
-      expect(result).toEqual({ accessToken: 'access-token', refreshToken: 'refresh-token' });
+      expect(result).toMatchObject({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        accessTokenExpiresAt: expect.any(Date),
+        refreshTokenExpiresAt: expect.any(Date),
+      });
       expect(userRepo.findOne).toHaveBeenCalledWith({ where: { email: dto.email } });
       expect(dataSource.transaction).toHaveBeenCalled();
     });
@@ -171,7 +176,12 @@ describe('AuthService', () => {
 
       const result = await service.register(dto, companyId);
 
-      expect(result).toEqual({ accessToken: 'access-token', refreshToken: 'refresh-token' });
+      expect(result).toMatchObject({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        accessTokenExpiresAt: expect.any(Date),
+        refreshTokenExpiresAt: expect.any(Date),
+      });
       expect(userRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ companyId }),
       );
@@ -202,7 +212,12 @@ describe('AuthService', () => {
 
       const result = await service.login(dto);
 
-      expect(result).toEqual({ accessToken: 'access-token', refreshToken: 'refresh-token' });
+      expect(result).toMatchObject({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        accessTokenExpiresAt: expect.any(Date),
+        refreshTokenExpiresAt: expect.any(Date),
+      });
     });
 
     it('throws UnauthorizedException when user does not exist', async () => {
@@ -249,7 +264,12 @@ describe('AuthService', () => {
 
       const result = await service.refreshTokens('user-uuid-1', 'valid-token');
 
-      expect(result).toEqual({ accessToken: 'new-access-token', refreshToken: 'new-refresh-token' });
+      expect(result).toMatchObject({
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+        accessTokenExpiresAt: expect.any(Date),
+        refreshTokenExpiresAt: expect.any(Date),
+      });
     });
 
     it('throws UnauthorizedException when user does not exist', async () => {

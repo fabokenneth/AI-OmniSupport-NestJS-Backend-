@@ -19,7 +19,9 @@ export class JwtRefreshStrategy extends PassportStrategy(
     private readonly userRepository: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromBodyField('refreshToken'),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request) => (req?.cookies as Record<string, string>)?.refreshToken ?? null,
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_REFRESH_SECRET'),
       passReqToCallback: true,
@@ -30,7 +32,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
     req: Request,
     payload: JwtPayload,
   ): Promise<User & { refreshToken: string }> {
-    const refreshToken = (req.body as { refreshToken?: string })?.refreshToken;
+    const refreshToken = (req.cookies as Record<string, string>)?.refreshToken;
 
     const user = await this.userRepository.findOne({
       where: { id: payload.sub, isActive: true },

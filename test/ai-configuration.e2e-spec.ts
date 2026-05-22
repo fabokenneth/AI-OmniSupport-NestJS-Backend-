@@ -10,6 +10,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
+import cookieParser from 'cookie-parser';
 import { AiConfigurationController } from '../src/ai-configuration/ai-configuration.controller';
 import { AiConfigurationService } from '../src/ai-configuration/ai-configuration.service';
 import { AiConfiguration } from '../src/ai-configuration/entities/ai-configuration.entity';
@@ -88,6 +89,7 @@ describe('AiConfiguration (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.use(cookieParser());
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
@@ -125,7 +127,7 @@ describe('AiConfiguration (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .get('/api/ai-config')
-        .set('Authorization', `Bearer ${accessToken}`);
+        .set('Cookie', `accessToken=${accessToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -138,7 +140,7 @@ describe('AiConfiguration (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .get('/api/ai-config')
-        .set('Authorization', `Bearer ${accessToken}`);
+        .set('Cookie', `accessToken=${accessToken}`);
 
       expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);
@@ -169,7 +171,7 @@ describe('AiConfiguration (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .put('/api/ai-config')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', `accessToken=${accessToken}`)
         .send(validBody);
 
       expect(res.status).toBe(200);
@@ -185,7 +187,7 @@ describe('AiConfiguration (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .put('/api/ai-config')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', `accessToken=${accessToken}`)
         .send(validBody);
 
       expect(res.status).toBe(200);
@@ -195,7 +197,7 @@ describe('AiConfiguration (e2e)', () => {
     it('400 — rejects an invalid tone value', async () => {
       const res = await request(app.getHttpServer())
         .put('/api/ai-config')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', `accessToken=${accessToken}`)
         .send({ ...validBody, tone: 'INVALID_TONE' });
 
       expect(res.status).toBe(400);
@@ -204,7 +206,7 @@ describe('AiConfiguration (e2e)', () => {
     it('400 — rejects instructions exceeding 5000 characters', async () => {
       const res = await request(app.getHttpServer())
         .put('/api/ai-config')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', `accessToken=${accessToken}`)
         .send({ ...validBody, instructions: 'x'.repeat(5001) });
 
       expect(res.status).toBe(400);
@@ -215,7 +217,7 @@ describe('AiConfiguration (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .put('/api/ai-config')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', `accessToken=${accessToken}`)
         .send(bodyWithoutTone);
 
       expect(res.status).toBe(400);

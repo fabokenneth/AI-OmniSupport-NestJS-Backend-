@@ -1,23 +1,23 @@
 ## AI-OmniSupport — API Requests
 ## Compatible with: VS Code REST Client & IntelliJ HTTP Client
 ##
+## AUTH TRANSPORT: tokens are set as HttpOnly SameSite=Strict cookies by the
+## server. You never handle raw token strings — the browser / cookie jar does.
+##
 ## WORKFLOW ORDER (no DB seeding needed):
 ##   1. docker-compose up -d
 ##   2. npm run start:dev
 ##   3. Run "Register Company + Admin" — this is the ONLY way to create a company
-##   4. Run "Login" to capture tokens
-##   5. All subsequent calls use tokens automatically
+##   4. Run "Login" — cookies are set automatically in your HTTP client's cookie jar
+##   5. All subsequent calls automatically include the cookies
 
 @baseUrl = http://localhost:3000/api
-@contentJson = Content-Type: application/json
 
 # ============================================================
-# CAPTURED VARIABLES (set automatically by named requests)
+# AI CONFIG
 # ============================================================
 
-@accessToken  = {{loginAdmin.response.body.data.accessToken}}
-@refreshToken = {{loginAdmin.response.body.data.refreshToken}}
-@documentId   = {{uploadDocument.response.body.data.id}}
+@documentId = {{uploadDocument.response.body.data.id}}
 
 
 # ============================================================
@@ -25,14 +25,13 @@
 # ============================================================
 
 ### 1. Register Company + First Admin  ← start here
-# Creates company and admin atomically. No token needed.
+# Creates company and admin atomically. Response sets auth cookies.
 POST {{baseUrl}}/auth/register-company
 Content-Type: application/json
 
 {
-  "companyName": "Acme Corp",
-  "companySlug": "acme-corp",
-  "email": "admin@acme.com",
+  "companyName": "Acmedd Corp",
+  "email": "admin@acmess.com",
   "password": "Admin1234!",
   "firstName": "Alice",
   "lastName": "Admin"
@@ -40,13 +39,12 @@ Content-Type: application/json
 
 ###
 
-### 2. Login  ← tokens captured into @accessToken / @refreshToken
-# @name loginAdmin
+### 2. Login  ← auth cookies set automatically by the server
 POST {{baseUrl}}/auth/login
-{{contentJson}}
+Content-Type: application/json
 
 {
-  "email": "admin@acme.com",
+  "email": "admin@acmess.com",
   "password": "Admin1234!"
 }
 
@@ -54,7 +52,7 @@ POST {{baseUrl}}/auth/login
 
 ### Login — wrong password (expect 401)
 POST {{baseUrl}}/auth/login
-{{contentJson}}
+Content-Type: application/json
 
 {
   "email": "admin@acme.com",
@@ -63,34 +61,18 @@ POST {{baseUrl}}/auth/login
 
 ###
 
-### Register Company — slug validation error (expect 400)
-POST {{baseUrl}}/auth/register-company
-{{contentJson}}
-
-{
-  "companyName": "Bad Slug",
-  "companySlug": "Bad_Slug_Here",
-  "email": "admin@badslug.com",
-  "password": "password123",
-  "firstName": "Test",
-  "lastName": "User"
-}
-
-
 # ============================================================
-# AUTH — Protected
+# AUTH — Protected (cookies sent automatically by the HTTP client)
 # ============================================================
 
 ### Get Current User
 GET {{baseUrl}}/auth/me
-Authorization: Bearer {{accessToken}}
 
 ###
 
-### Invite a Manager (Admin only — no companyId in body)
+### Invite a Manager (Admin only — companyId comes from JWT cookie)
 POST {{baseUrl}}/auth/register
-Authorization: Bearer {{accessToken}}
-{{contentJson}}
+Content-Type: application/json
 
 {
   "email": "manager@acme.com",
@@ -104,8 +86,7 @@ Authorization: Bearer {{accessToken}}
 
 ### Invite an Agent (Admin only)
 POST {{baseUrl}}/auth/register
-Authorization: Bearer {{accessToken}}
-{{contentJson}}
+Content-Type: application/json
 
 {
   "email": "agent@acme.com",
@@ -119,8 +100,7 @@ Authorization: Bearer {{accessToken}}
 
 ### Invite — admin role rejected (expect 400)
 POST {{baseUrl}}/auth/register
-Authorization: Bearer {{accessToken}}
-{{contentJson}}
+Content-Type: application/json
 
 {
   "email": "another@acme.com",
@@ -132,20 +112,13 @@ Authorization: Bearer {{accessToken}}
 
 ###
 
-### Refresh Tokens
+### Refresh Tokens — uses refreshToken cookie, no body needed
 POST {{baseUrl}}/auth/refresh
-{{contentJson}}
-
-{
-  "refreshToken": "{{refreshToken}}"
-}
 
 ###
 
-### Logout
+### Logout — clears both cookies server-side
 POST {{baseUrl}}/auth/logout
-Authorization: Bearer {{accessToken}}
-
 
 # ============================================================
 # COMPANIES — Scoped to caller's company
@@ -153,19 +126,39 @@ Authorization: Bearer {{accessToken}}
 
 ### Get My Company
 GET {{baseUrl}}/companies/me
-Authorization: Bearer {{accessToken}}
 
 ###
 
 ### Update My Company (Admin only)
 PUT {{baseUrl}}/companies/me
-Authorization: Bearer {{accessToken}}
-{{contentJson}}
+Content-Type: application/json
 
 {
   "name": "Acme Corporation"
 }
 
+###
+
+# ============================================================
+# AI CONFIGURATION
+# ============================================================
+
+### Get AI Config
+GET {{baseUrl}}/ai-config
+
+###
+
+### Upsert AI Config
+PUT {{baseUrl}}/ai-config
+Content-Type: application/json
+
+{
+  "tone": "professional",
+  "botName": "Aria",
+  "instructions": "Always greet warmly and keep answers concise."
+}
+
+###
 
 # ============================================================
 # KNOWLEDGE BASE
@@ -174,13 +167,8 @@ Authorization: Bearer {{accessToken}}
 ### Upload PDF Document  ← @documentId captured
 # @name uploadDocument
 POST {{baseUrl}}/knowledge-base/documents
-Authorization: Bearer {{accessToken}}
 Content-Type: multipart/form-data; boundary=----Boundary
 
-------Boundary
-Content-Disposition: form-data; name="companyId"
-
-acme-company-uuid-here
 ------Boundary
 Content-Disposition: form-data; name="file"; filename="handbook.pdf"
 Content-Type: application/pdf
@@ -192,19 +180,16 @@ Content-Type: application/pdf
 
 ### List My Company's Documents
 GET {{baseUrl}}/knowledge-base/documents
-Authorization: Bearer {{accessToken}}
 
 ###
 
 ### Get Document by ID
 GET {{baseUrl}}/knowledge-base/documents/{{documentId}}
-Authorization: Bearer {{accessToken}}
 
 ###
 
 ### Delete Document (Admin / Manager only, expect 204)
 DELETE {{baseUrl}}/knowledge-base/documents/{{documentId}}
-Authorization: Bearer {{accessToken}}
 
 
 # ============================================================
@@ -213,8 +198,7 @@ Authorization: Bearer {{accessToken}}
 
 ### Start a Chat
 POST {{baseUrl}}/messaging/chat
-Authorization: Bearer {{accessToken}}
-{{contentJson}}
+Content-Type: application/json
 
 {
   "content": "How do I reset my password?",
@@ -226,8 +210,7 @@ Authorization: Bearer {{accessToken}}
 
 ### Continue Conversation
 POST {{baseUrl}}/messaging/chat
-Authorization: Bearer {{accessToken}}
-{{contentJson}}
+Content-Type: application/json
 
 {
   "content": "And what if I forgot my email?",
@@ -239,13 +222,11 @@ Authorization: Bearer {{accessToken}}
 
 ### List Conversations
 GET {{baseUrl}}/messaging/conversations
-Authorization: Bearer {{accessToken}}
 
 ###
 
 ### Get Conversation by Session ID
 GET {{baseUrl}}/messaging/conversations/session-demo-001
-Authorization: Bearer {{accessToken}}
 
 
 # ============================================================
@@ -254,7 +235,7 @@ Authorization: Bearer {{accessToken}}
 
 ### Simulate WhatsApp Webhook
 POST {{baseUrl}}/connectors/webhooks/whatsapp
-{{contentJson}}
+Content-Type: application/json
 x-hub-signature-256: sha256=placeholder-signature
 
 {
