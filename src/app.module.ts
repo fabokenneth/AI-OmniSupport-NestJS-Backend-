@@ -8,6 +8,7 @@ import { CompaniesModule } from './companies/companies.module';
 import { KnowledgeBaseModule } from './knowledge-base/knowledge-base.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { ConnectorsModule } from './connectors/connectors.module';
+import { AiConfigurationModule } from './ai-configuration/ai-configuration.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ConnectorsModule } from './connectors/connectors.module';
     KnowledgeBaseModule,
     MessagingModule,
     ConnectorsModule,
+    AiConfigurationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
