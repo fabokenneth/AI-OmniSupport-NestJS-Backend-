@@ -14,8 +14,14 @@ import { Company } from '../companies/entities/company.entity';
 import { RegisterCompanyDto } from './dto/register-company.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { TokensDto } from './dto/tokens.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+
+export interface GeneratedTokens {
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: Date;
+  refreshTokenExpiresAt: Date;
+}
 
 @Injectable()
 export class AuthService {
@@ -28,7 +34,7 @@ export class AuthService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async registerCompany(dto: RegisterCompanyDto): Promise<TokensDto> {
+  async registerCompany(dto: RegisterCompanyDto): Promise<GeneratedTokens> {
     const existing = await this.userRepository.findOne({
       where: { email: dto.email },
     });
@@ -59,7 +65,7 @@ export class AuthService {
     return this.generateAndStoreTokens(savedUser);
   }
 
-  async register(dto: RegisterDto, companyId: string): Promise<TokensDto> {
+  async register(dto: RegisterDto, companyId: string): Promise<GeneratedTokens> {
     const existing = await this.userRepository.findOne({
       where: { email: dto.email },
     });
@@ -79,7 +85,7 @@ export class AuthService {
     return this.generateAndStoreTokens(saved);
   }
 
-  async login(dto: LoginDto): Promise<TokensDto> {
+  async login(dto: LoginDto): Promise<GeneratedTokens> {
     const user = await this.userRepository.findOne({
       where: { email: dto.email, isActive: true },
     });
@@ -98,7 +104,7 @@ export class AuthService {
   async refreshTokens(
     userId: string,
     incomingRefreshToken: string,
-  ): Promise<TokensDto> {
+  ): Promise<GeneratedTokens> {
     const user = await this.userRepository.findOne({
       where: { id: userId, isActive: true },
     });
@@ -119,7 +125,15 @@ export class AuthService {
     return this.generateAndStoreTokens(user);
   }
 
-  private async generateAndStoreTokens(user: User): Promise<TokensDto> {
+  private parseTtlMs(ttl: string): number {
+    const value = parseInt(ttl, 10);
+    if (ttl.endsWith('d')) return value * 24 * 60 * 60 * 1000;
+    if (ttl.endsWith('h')) return value * 60 * 60 * 1000;
+    if (ttl.endsWith('m')) return value * 60 * 1000;
+    return value * 1000;
+  }
+
+  private async generateAndStoreTokens(user: User): Promise<GeneratedTokens> {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -127,20 +141,29 @@ export class AuthService {
       companyId: user.companyId,
     };
 
+    const accessTtl = this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
+    const refreshTtl = this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d');
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
+        expiresIn: accessTtl,
       }),
       this.jwtService.signAsync(payload, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
+        expiresIn: refreshTtl,
       }),
     ]);
 
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
     await this.userRepository.update(user.id, { refreshToken: hashedRefreshToken });
 
-    return { accessToken, refreshToken };
+    const now = Date.now();
+    return {
+      accessToken,
+      refreshToken,
+      accessTokenExpiresAt: new Date(now + this.parseTtlMs(accessTtl)),
+      refreshTokenExpiresAt: new Date(now + this.parseTtlMs(refreshTtl)),
+    };
   }
 }

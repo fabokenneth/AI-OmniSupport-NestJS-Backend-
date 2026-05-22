@@ -11,6 +11,7 @@ import { PassportModule } from '@nestjs/passport';
 import { getRepositoryToken, getDataSourceToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import * as bcrypt from 'bcrypt';
+import cookieParser from 'cookie-parser';
 import { AuthController } from '../src/auth/auth.controller';
 import { AuthService } from '../src/auth/auth.service';
 import { JwtStrategy } from '../src/auth/strategies/jwt.strategy';
@@ -34,6 +35,15 @@ const mockUserRepo = {
 };
 
 const mockDataSource = { transaction: jest.fn() };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function extractCookie(setCookieHeader: string[], name: string): string {
+  const entry = setCookieHeader?.find((c) => c.startsWith(`${name}=`));
+  return entry?.split(';')[0].split('=').slice(1).join('=') ?? '';
+}
 
 // ---------------------------------------------------------------------------
 // Suite
@@ -91,6 +101,7 @@ describe('Auth (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.use(cookieParser());
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
@@ -102,7 +113,7 @@ describe('Auth (e2e)', () => {
     );
     await app.init();
 
-    // Obtain real JWT tokens via login for protected-route tests
+    // Obtain real tokens via login — extract from Set-Cookie headers
     mockUserRepo.findOne.mockResolvedValue({ ...mockUser });
     mockUserRepo.update.mockResolvedValue({ affected: 1 });
 
@@ -110,8 +121,9 @@ describe('Auth (e2e)', () => {
       .post('/api/auth/login')
       .send({ email: mockUser.email, password: PLAIN_PASSWORD });
 
-    accessToken = loginRes.body.data.accessToken;
-    refreshToken = loginRes.body.data.refreshToken;
+    const setCookies = loginRes.headers['set-cookie'] as unknown as string[];
+    accessToken = extractCookie(setCookies, 'accessToken');
+    refreshToken = extractCookie(setCookies, 'refreshToken');
   });
 
   afterAll(() => app.close());
@@ -144,7 +156,7 @@ describe('Auth (e2e)', () => {
       });
     };
 
-    it('201 — creates company + admin and returns JWT pair', async () => {
+    it('201 — sets auth cookies and returns expiry timestamps', async () => {
       mockUserRepo.findOne.mockResolvedValue(null);
       setupTransactionMock(mockUser);
       mockUserRepo.update.mockResolvedValue({ affected: 1 });
@@ -155,8 +167,16 @@ describe('Auth (e2e)', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(res.body.data).toHaveProperty('accessToken');
-      expect(res.body.data).toHaveProperty('refreshToken');
+      expect(res.body.data).toHaveProperty('accessTokenExpiresAt');
+      expect(res.body.data).toHaveProperty('refreshTokenExpiresAt');
+      expect(res.body.data).not.toHaveProperty('accessToken');
+      expect(res.body.data).not.toHaveProperty('refreshToken');
+
+      const cookies = res.headers['set-cookie'] as unknown as string[];
+      expect(cookies.some((c) => c.startsWith('accessToken='))).toBe(true);
+      expect(cookies.some((c) => c.startsWith('refreshToken='))).toBe(true);
+      expect(cookies.every((c) => c.includes('HttpOnly'))).toBe(true);
+      expect(cookies.every((c) => c.toLowerCase().includes('samesite=strict'))).toBe(true);
     });
 
     it('409 — returns Conflict when email is already registered', async () => {
@@ -201,9 +221,7 @@ describe('Auth (e2e)', () => {
       role: 'agent',
     };
 
-    it('201 — admin invites a new agent (no companyId in body)', async () => {
-      // First findOne: JWT strategy validates admin token
-      // Second findOne: AuthService checks email availability
+    it('201 — admin invites a new agent, sets auth cookies', async () => {
       mockUserRepo.findOne
         .mockResolvedValueOnce(Object.assign(new User(), mockUser))
         .mockResolvedValueOnce(null);
@@ -213,21 +231,22 @@ describe('Auth (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/api/auth/register')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', `accessToken=${accessToken}`)
         .send(validBody);
 
       expect(res.status).toBe(201);
-      expect(res.body.data).toHaveProperty('accessToken');
+      expect(res.body.data).toHaveProperty('accessTokenExpiresAt');
+      expect(res.body.data).not.toHaveProperty('accessToken');
     });
 
     it('409 — returns Conflict when email is already taken', async () => {
       mockUserRepo.findOne
-        .mockResolvedValueOnce(Object.assign(new User(), mockUser)) // JWT validation
-        .mockResolvedValueOnce({ ...mockUser });                     // email exists
+        .mockResolvedValueOnce(Object.assign(new User(), mockUser))
+        .mockResolvedValueOnce({ ...mockUser });
 
       const res = await request(app.getHttpServer())
         .post('/api/auth/register')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', `accessToken=${accessToken}`)
         .send(validBody);
 
       expect(res.status).toBe(409);
@@ -236,7 +255,7 @@ describe('Auth (e2e)', () => {
     it('400 — rejects admin role in invite body', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/auth/register')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', `accessToken=${accessToken}`)
         .send({ ...validBody, role: 'admin' });
 
       expect(res.status).toBe(400);
@@ -256,7 +275,7 @@ describe('Auth (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('POST /api/auth/login', () => {
-    it('200 — returns JWT pair for valid credentials', async () => {
+    it('200 — sets auth cookies and returns expiry timestamps', async () => {
       mockUserRepo.findOne.mockResolvedValue({ ...mockUser });
       mockUserRepo.update.mockResolvedValue({ affected: 1 });
 
@@ -266,8 +285,16 @@ describe('Auth (e2e)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data).toHaveProperty('accessToken');
-      expect(res.body.data).toHaveProperty('refreshToken');
+      expect(res.body.data).toHaveProperty('accessTokenExpiresAt');
+      expect(res.body.data).toHaveProperty('refreshTokenExpiresAt');
+      expect(res.body.data).not.toHaveProperty('accessToken');
+      expect(res.body.data).not.toHaveProperty('refreshToken');
+
+      const cookies = res.headers['set-cookie'] as unknown as string[];
+      expect(cookies.some((c) => c.startsWith('accessToken='))).toBe(true);
+      expect(cookies.some((c) => c.startsWith('refreshToken='))).toBe(true);
+      expect(cookies.every((c) => c.includes('HttpOnly'))).toBe(true);
+      expect(cookies.every((c) => c.toLowerCase().includes('samesite=strict'))).toBe(true);
     });
 
     it('401 — rejects incorrect password', async () => {
@@ -309,7 +336,7 @@ describe('Auth (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .get('/api/auth/me')
-        .set('Authorization', `Bearer ${accessToken}`);
+        .set('Cookie', `accessToken=${accessToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.data.email).toBe(mockUser.email);
@@ -317,15 +344,15 @@ describe('Auth (e2e)', () => {
       expect(res.body.data).not.toHaveProperty('refreshToken');
     });
 
-    it('401 — rejects missing token', async () => {
+    it('401 — rejects missing cookie', async () => {
       const res = await request(app.getHttpServer()).get('/api/auth/me');
       expect(res.status).toBe(401);
     });
 
-    it('401 — rejects malformed token', async () => {
+    it('401 — rejects malformed token in cookie', async () => {
       const res = await request(app.getHttpServer())
         .get('/api/auth/me')
-        .set('Authorization', 'Bearer bad.token.here');
+        .set('Cookie', 'accessToken=bad.token.here');
       expect(res.status).toBe(401);
     });
 
@@ -334,7 +361,7 @@ describe('Auth (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .get('/api/auth/me')
-        .set('Authorization', `Bearer ${accessToken}`);
+        .set('Cookie', `accessToken=${accessToken}`);
 
       expect(res.status).toBe(401);
     });
@@ -345,24 +372,28 @@ describe('Auth (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('POST /api/auth/refresh', () => {
-    it('200 — issues a new token pair for a valid refresh token', async () => {
+    it('200 — issues a new token pair via cookie and returns expiry timestamps', async () => {
       const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
       mockUserRepo.findOne.mockResolvedValue({ ...mockUser, refreshToken: hashedRefreshToken });
       mockUserRepo.update.mockResolvedValue({ affected: 1 });
 
       const res = await request(app.getHttpServer())
         .post('/api/auth/refresh')
-        .send({ refreshToken });
+        .set('Cookie', `refreshToken=${refreshToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.accessToken).toEqual(expect.any(String));
-      expect(res.body.data.refreshToken).toEqual(expect.any(String));
+      expect(res.body.data).toHaveProperty('accessTokenExpiresAt');
+      expect(res.body.data).toHaveProperty('refreshTokenExpiresAt');
+
+      const cookies = res.headers['set-cookie'] as unknown as string[];
+      expect(cookies.some((c) => c.startsWith('accessToken='))).toBe(true);
+      expect(cookies.some((c) => c.startsWith('refreshToken='))).toBe(true);
     });
 
-    it('401 — rejects invalid refresh token', async () => {
+    it('401 — rejects invalid refresh token cookie', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/auth/refresh')
-        .send({ refreshToken: 'completely.invalid.garbage' });
+        .set('Cookie', 'refreshToken=completely.invalid.garbage');
 
       expect(res.status).toBe(401);
     });
@@ -373,16 +404,20 @@ describe('Auth (e2e)', () => {
   // -------------------------------------------------------------------------
 
   describe('POST /api/auth/logout', () => {
-    it('200 — clears the refresh token', async () => {
+    it('200 — clears the refresh token and clears cookies', async () => {
       mockUserRepo.findOne.mockResolvedValue({ ...mockUser });
       mockUserRepo.update.mockResolvedValue({ affected: 1 });
 
       const res = await request(app.getHttpServer())
         .post('/api/auth/logout')
-        .set('Authorization', `Bearer ${accessToken}`);
+        .set('Cookie', `accessToken=${accessToken}`);
 
       expect(res.status).toBe(200);
       expect(mockUserRepo.update).toHaveBeenCalledWith(mockUser.id, { refreshToken: null });
+
+      const cookies = res.headers['set-cookie'] as unknown as string[];
+      expect(cookies.some((c) => c.startsWith('accessToken='))).toBe(true);
+      expect(cookies.some((c) => c.startsWith('refreshToken='))).toBe(true);
     });
 
     it('401 — rejects unauthenticated request', async () => {

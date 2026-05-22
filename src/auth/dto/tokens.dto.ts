@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class TokensDto {
-  @ApiProperty()
-  accessToken: string;
+export class AuthResponseDto {
+  @ApiProperty({ description: 'ISO 8601 expiry timestamp of the access token' })
+  accessTokenExpiresAt: string;
 
-  @ApiProperty()
-  refreshToken: string;
+  @ApiProperty({ description: 'ISO 8601 expiry timestamp of the refresh token' })
+  refreshTokenExpiresAt: string;
 }
